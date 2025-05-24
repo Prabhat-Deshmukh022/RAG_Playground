@@ -7,7 +7,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 from typing import Optional
-from rag_implementation import Basic_RAG,Hybrid_RAG
+from rag_implementation import Basic_RAG,Hybrid_RAG,AutoMerge_RAG
 from typing import List
 
 app = FastAPI()
@@ -49,6 +49,9 @@ async def upload_pdf(option:int = Form(...), files: List[UploadFile] = File(...)
                 
                 case 2:
                     rag_pipeline=Hybrid_RAG()
+                
+                case 3:
+                    rag_pipeline=AutoMerge_RAG()
                 
                 case _:
                     raise HTTPException(status_code=400, detail="Invalid option value")

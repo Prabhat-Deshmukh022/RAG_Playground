@@ -12,6 +12,24 @@ from langchain.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
 from langchain.docstore.document import Document
 
+from llama_index.core import (
+    VectorStoreIndex,
+    SimpleDirectoryReader,
+    # ServiceContext,
+    Settings,
+    get_response_synthesizer,
+    StorageContext
+)
+
+from llama_index.llms.openai import OpenAI
+# from llama_index.node_parser import SimpleNodeParser
+from llama_index.core.text_splitter import SentenceSplitter
+# from llama_index.core.retrievers import RetrieverQueryEngine
+from llama_index.core.retrievers import VectorIndexRetriever, AutoMergingRetriever
+from llama_index.core.schema import Document
+from llama_index.core.node_parser import HierarchicalNodeParser
+from llama_index.llms.groq import Groq
+
 from typing import List, Optional, Dict
 from transformers import AutoTokenizer, AutoModel
 import torch
@@ -28,6 +46,7 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 UPLOAD_DIR = 'temp_uploads'
 
 class Basic_RAG(RAGEngine):
@@ -242,7 +261,7 @@ class Basic_RAG(RAGEngine):
                         }
                     ],
                     "generationConfig": {
-                        "temperature": 0.7,
+                        "temperature": 0.0,
                         "maxOutputTokens": 1000,
                         # "stopSequences": ["\n\n"]
                     }
@@ -494,4 +513,110 @@ class Hybrid_RAG(RAGEngine):
                 "error": f"Unexpected error: {str(e)}"
             }
 
+class AutoMerge_RAG(RAGEngine):
+    def __init__(self):
+        
+        self.embedding_model = HuggingFaceBgeEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
 
+        self.llm = Groq(
+            model="llama-3.3-70b-versatile",  # You can change this to llama3-70b or gemma-7b too
+            api_key=GROQ_API_KEY,
+            temperature=0.7,
+        )
+
+        self.node_parser = HierarchicalNodeParser.from_defaults()
+
+        Settings.llm=self.llm
+        Settings.embed_model=self.embedding_model
+        Settings.node_parser=self.node_parser
+
+        self.index: Optional[VectorStoreIndex] = None
+        self.chunks: List[str] = []
+        self.documents: List[Document] = []
+
+    def chunk(self, file_path:str) -> List[str]:
+        reader = SimpleDirectoryReader(input_files=[file_path])
+        self.documents=reader.load_data()
+
+        splitter = SentenceSplitter(chunk_size=500, chunk_overlap=50)
+        parsed_nodes = splitter.get_nodes_from_documents(self.documents)
+
+        self.chunks = [node.get_content() for node in parsed_nodes]
+        return self.chunks
+    
+    def embed(self, *args, **kwargs):
+        pass
+
+    def ingest(self, file_path):
+        try:
+            self.chunk(file_path=file_path)
+            self.index = VectorStoreIndex.from_documents(
+                documents=self.documents
+            )
+            return True
+        
+        except Exception as e:
+            print(f"Ingestion failed: {str(e)}")
+            self.index = None
+            return False
+    
+    def search(self, query: str, top_k: int = 3) -> Optional[List[str]]:
+        if not self.index:
+            print("Index not initialized.")
+            return None
+        try:
+            # retriever = AutoMergingRetriever(index=self.index, similarity_top_k=top_k)
+            vector_index_retriever=VectorIndexRetriever(index=self.index, similarity_top_k=top_k)
+            storage_context = self.index.storage_context
+            retriever = AutoMergingRetriever(vector_retriever=vector_index_retriever,storage_context=storage_context)
+            results = retriever.retrieve(query)
+            return [(node.get_content(), node.score) for node in results]
+        except Exception as e:
+            print(f"Search failed: {str(e)}")
+            return None
+
+    def build_prompt(self, contexts: List[str], query: str) -> str:
+        context_str = "\n\n--- CONTEXT {} ---\n{}"
+        numbered_contexts = [
+            context_str.format(i + 1, ctx.strip())
+            for i, ctx in enumerate(contexts) if ctx.strip()
+        ]
+
+        return (
+            "You are a helpful assistant. Use the following contexts to answer the question. "
+            "If unsure, say 'I don't know'.\n\n"
+            f"{'\n\n'.join(numbered_contexts)}\n\n"
+            f"Question: {query}\n"
+            "Answer:"
+        )
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10), reraise=True)
+    def send_query(self, query: str, top_k: int = 3) -> Dict[str, Optional[str]]:
+        try:
+            search_results = self.search(query, top_k=top_k)
+            if not search_results:
+                return {
+                    "answer": "I couldn't find any relevant information to answer your question.",
+                    "contexts": [],
+                    "error": None
+                }
+
+            contexts = [res[0] if isinstance(res, tuple) else res for res in search_results]
+            prompt = self.build_prompt(contexts, query)
+
+            response = self.llm.complete(prompt)
+
+            return {
+                "answer": response.text.strip(),
+                "contexts": contexts,
+                "error": None
+            }
+
+        except Exception as e:
+            return {
+                "answer": None,
+                "contexts": contexts if 'contexts' in locals() else [],
+                "error": f"Unexpected error: {str(e)}"
+            }
