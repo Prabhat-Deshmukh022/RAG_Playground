@@ -3,8 +3,15 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from RAG.RAG_Engine import RAGEngine
-from langchain.document_loaders import PyPDFLoader
+
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
+from langchain.docstore.document import Document
+
 from typing import List, Optional, Dict
 from transformers import AutoTokenizer, AutoModel
 import torch
@@ -13,12 +20,15 @@ import numpy as np
 import faiss
 import requests
 
+from remove_file_contents import clear_directory
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+UPLOAD_DIR = 'temp_uploads'
 
 class Basic_RAG(RAGEngine):
 
@@ -47,6 +57,8 @@ class Basic_RAG(RAGEngine):
         documents = loader.load()
 
         chunks = self.text_splitter.split_documents(documents)
+
+        clear_directory(UPLOAD_DIR)
 
         return [chunk.page_content for chunk in chunks]
         
@@ -263,4 +275,223 @@ class Basic_RAG(RAGEngine):
                 "contexts": contexts if 'contexts' in locals() else [],
                 "error": f"Unexpected error: {str(e)}"
             }
+
+class Hybrid_RAG(RAGEngine):
+    def __init__(self,model: str = "mistral-small", temperature: float = 0.0):
+        self.model = model
+        self.temperature = temperature
+
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50,
+            length_function=len,
+            separators=["\n\n","\n"," "]
+        )
+
+        self.embedding_model = HuggingFaceBgeEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+
+        self.retriever = None
+        self.documents = []
+        self.api_key=MISTRAL_API_KEY
+        self.api_url = "https://api.mistral.ai/v1/chat/completions"
+    
+    def chunk(self, file_path: str) -> List[str]:
+        loader = PyPDFLoader(file_path=file_path)
+        documents = loader.load()
+
+        chunks = self.text_splitter.split_documents(documents=documents)
+        self.documents = chunks
+
+        clear_directory(UPLOAD_DIR)
+
+        return [chunk.page_content for chunk in chunks]
+    
+    def embed(self):
+        dense_db=FAISS.from_documents(self.documents, self.embedding_model)
+        dense_retriever = dense_db.as_retriever(search_kwargs={"k":5})
+
+        return dense_retriever
+    
+    def ingest(self, file_path:str) -> bool:
+        try:
+            self.chunk(file_path=file_path)
+
+            if not self.documents:
+                raise ValueError("No valid chunks extracted!")
+            
+            dense_retriever = self.embed()
+
+            sparse_retriever = BM25Retriever.from_documents(self.documents)
+            sparse_retriever.k = 5
+
+            self.retriever=EnsembleRetriever(
+                retrievers=[sparse_retriever,dense_retriever],
+            )
+
+            print(self.retriever)
+
+            return True
+        
+        except Exception as e:
+            print(f"Ingestion failed: {e}")
+            self.retriever = None
+            return False
+
+    def search(self, query:str, top_k:int=3) -> Optional[List[str]]:
+
+        print(self.retriever)
+
+        if not self.retriever:
+            print("Retriever not initialized. Ingest documents first.")
+            return None
+        
+        try:
+            results = self.retriever.invoke(query)
+            return [(doc.page_content,None) for doc in results[:top_k]]
+        
+        except Exception as e:
+            print(f"Search failed: {str(e)}")
+            return None
+    
+    def build_prompt(self, contexts: List[str], query: str) -> str:
+        """
+        Builds a RAG prompt with clear instructions and context separation.
+        
+        Args:
+            contexts: List of context strings retrieved from search
+            query: User's question/query
+            
+        Returns:
+            Formatted prompt string
+        """
+        # Join contexts with clear separators
+        context_str = "\n\n--- CONTEXT {} ---\n{}"
+        numbered_contexts = [
+            context_str.format(i+1, ctx.strip())
+            for i, ctx in enumerate(contexts)
+            if ctx.strip()  # Skip empty contexts
+        ]
+        
+        prompt_template = (
+            "You are a helpful AI assistant. Answer the question based only on the provided context. "
+            "If you don't know the answer, say 'I don't know'.\n\n"
+            # "Continue your answer after the ':' puncuation"
+            "{contexts}\n\n"
+            "Question: {query}\n"
+            "Answer:"
+        )
+        
+        return prompt_template.format(
+            contexts="\n\n".join(numbered_contexts),
+            query=query.strip()
+        )
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True
+    )
+
+    def send_query(self, query: str, top_k: int = 3) -> Dict[str, Optional[str]]:
+        """
+        Send query to Gemini API with RAG context.
+        
+        Args:
+            query: User's question
+            top_k: Number of context passages to retrieve
+            
+        Returns:
+            Dictionary containing:
+            - answer: Generated response
+            - contexts: Used context passages
+            - error: Optional error message
+        """
+        try:
+            # Retrieve relevant contexts
+            search_results = self.search(query, top_k=top_k)
+            if not search_results:
+                return {
+                    "answer": "I couldn't find any relevant information to answer your question.",
+                    "contexts": [],
+                    "error": None
+                }
+                
+            # Extract just the text if search returns (text, score) tuples
+            contexts = [res[0] if isinstance(res, tuple) else res for res in search_results]
+            
+            # Build the prompt
+            prompt = self.build_prompt(contexts, query)
+            
+            # # Call Gemini API (using hypothetical API structure)
+            # response = requests.post(
+            #     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            #     # "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent",
+            #     headers={
+            #         "Content-Type": "application/json"
+            #     },
+            #     params={
+            #         "key": self.api_key  # Make sure this is a valid Gemini API key
+            #     },
+            #     json={
+            #         "contents": [
+            #             {
+            #                 "parts": [
+            #                     {"text": prompt}
+            #                 ]
+            #             }
+            #         ],
+            #         "generationConfig": {
+            #             "temperature": 0.7,
+            #             "maxOutputTokens": 1000,
+            #             # "stopSequences": ["\n\n"]
+            #         }
+            #     },
+            #     timeout=10
+            # )
+
+            headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+            }
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": self.temperature,
+            }
+
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+
+            response.raise_for_status()  # Raises exception for 4XX/5XX responses
+            result = response.json()
+
+            print(response)
+            print(result)
+            
+            return {
+                # "answer": result.get("text", "").strip(),
+                "answer":content,
+                "contexts": contexts,
+                "error": None
+            }
+            
+        except requests.exceptions.RequestException as e:
+            return {
+                "answer": None,
+                "contexts": contexts if 'contexts' in locals() else [],
+                "error": f"API request failed: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "answer": None,
+                "contexts": contexts if 'contexts' in locals() else [],
+                "error": f"Unexpected error: {str(e)}"
+            }
+
 
