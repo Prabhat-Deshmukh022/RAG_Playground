@@ -87,8 +87,10 @@ async def upload_pdf(rag_option:int = Form(...), llm_option:int=Form(...),files:
 
 @app.post("/query",
           summary="Talking to the language model")
-async def query_rag(option:int = Form(...), query: str = Form(...)):
+async def query_rag(option:int, query: str = Form(...)):
     try:
+
+        print(query)
 
         rag_pipeline = rag_pipelines.get(option)
 
@@ -108,3 +110,4 @@ async def query_rag(option:int = Form(...), query: str = Form(...)):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

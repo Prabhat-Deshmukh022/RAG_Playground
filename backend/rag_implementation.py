@@ -6,7 +6,8 @@ from RAG.RAG_Engine import RAGEngine
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+# from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
@@ -290,7 +291,7 @@ class Hybrid_RAG(RAGEngine):
             separators=["\n\n","\n"," "]
         )
 
-        self.embedding_model = HuggingFaceBgeEmbeddings(
+        self.embedding_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
@@ -307,7 +308,7 @@ class Hybrid_RAG(RAGEngine):
         chunks = self.text_splitter.split_documents(documents=documents)
         self.documents.extend(chunks)
 
-        print(chunks)
+        # print(chunks)
 
         clear_directory(UPLOAD_DIR)
 
@@ -481,7 +482,7 @@ class Hybrid_RAG(RAGEngine):
 class AutoMerge_RAG(RAGEngine):
     def __init__(self,option:int):
         
-        self.embedding_model = HuggingFaceBgeEmbeddings(
+        self.embedding_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
@@ -510,7 +511,7 @@ class AutoMerge_RAG(RAGEngine):
         reader = SimpleDirectoryReader(input_files=[file_path])
         self.documents.extend(reader.load_data())
 
-        print(self.documents)
+        # print(self.documents)
 
         splitter = SentenceSplitter(chunk_size=500, chunk_overlap=50)
         parsed_nodes = splitter.get_nodes_from_documents(self.documents)
