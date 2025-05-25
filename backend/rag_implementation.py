@@ -39,6 +39,7 @@ import faiss
 import requests
 
 from remove_file_contents import clear_directory
+from language_model_api import language_model_api
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -51,7 +52,7 @@ UPLOAD_DIR = 'temp_uploads'
 
 class Basic_RAG(RAGEngine):
 
-    def __init__(self):
+    def __init__(self, option:int):
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,          # Target size of chunks
             chunk_overlap=50,       # Overlap between chunks
@@ -60,16 +61,19 @@ class Basic_RAG(RAGEngine):
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-        self.model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+        self.embedding_model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
         # self.device = 'cuda' if torch.cuda.is_available else 'cpu'
         self.device = 'cpu'
-        self.model.to(self.device)
+        self.embedding_model.to(self.device)
 
         self.index=None
         self.chunks=[]
         self.dim=None
 
-        self.api_key = GEMINI_API_KEY
+        # self.model="mistral-medium"
+        self.option=option
+        # self.api_key = MISTRAL_API_KEY
+        # self.api_url="https://api.mistral.ai/v1/chat/completions"
 
     def chunk(self, file_path:str) -> List[str]:
         loader = PyPDFLoader(file_path=file_path)
@@ -77,12 +81,16 @@ class Basic_RAG(RAGEngine):
 
         chunks = self.text_splitter.split_documents(documents)
 
-        clear_directory(UPLOAD_DIR)
+        # print(chunks)
 
-        return [chunk.page_content for chunk in chunks]
+        final_chunks = [chunk.page_content for chunk in chunks]
+
+        self.chunks.extend(final_chunks)
+
+        return final_chunks
         
     def embed(self, chunks:list[str], batch_size:int = 32) -> np.ndarray:
-        self.model.eval()
+        self.embedding_model.eval()
 
         all_embeddings=[]
 
@@ -97,7 +105,7 @@ class Basic_RAG(RAGEngine):
                     return_tensors="pt"
                 ).to(self.device)
                 
-                outputs = self.model(**inputs)
+                outputs = self.embedding_model(**inputs)
                 
                 # Perform mean pooling with attention mask
                 token_embeddings = outputs.last_hidden_state
@@ -122,14 +130,16 @@ class Basic_RAG(RAGEngine):
                 
         return np.vstack(all_embeddings)
     
-    def ingest(self, file_path:str) -> bool:
+    def ingest(self) -> bool:
         try:
-            self.chunks=self.chunk(file_path=file_path)
+            # self.chunks.extend(self.chunk(file_path=file_path))
 
             if not self.chunks:
                 raise ValueError("No valid chunks extracted!")
             
+            print(f"Length of chunks {len(self.chunks)}")
             vectors = self.embed(chunks=self.chunks)
+            print(f"Shape of vector {vectors.shape}")
             self.dim = vectors.shape[1]
 
             faiss.normalize_L2(vectors)
@@ -146,7 +156,7 @@ class Basic_RAG(RAGEngine):
             self.chunks = []
             return False
 
-    def search(self, query:str, top_k:int = 3) -> Optional[List[str]]:
+    def search(self, query:str, top_k:int = 10) -> Optional[List[str]]:
         if not self.index or not self.chunks:
             print("Index not initialized - please ingest documents first")
             return None
@@ -163,11 +173,13 @@ class Basic_RAG(RAGEngine):
             scores = [max(0, 1 - distance) for distance in distances[0]]
             
             # Return chunks with their scores
-            return [
+            results = [
                 (self.chunks[idx], float(score))
                 for idx, score in zip(indices[0], scores)
                 if idx >= 0  # FAISS returns -1 for invalid indices
             ]
+            print("Retrieved contexts: ",results)
+            return results
             
         except Exception as e:
             print(f"Search failed: {str(e)}")
@@ -194,17 +206,19 @@ class Basic_RAG(RAGEngine):
         
         prompt_template = (
             "You are a helpful AI assistant. Answer the question based only on the provided context. "
-            "If you don't know the answer, say 'I don't know'.\n\n"
+            "If the answer is not directly in the context, try to infer it from the information provided'.\n\n"
             # "Continue your answer after the ':' puncuation"
             "{contexts}\n\n"
             "Question: {query}\n"
             "Answer:"
         )
         
-        return prompt_template.format(
+        prompt = prompt_template.format(
             contexts="\n\n".join(numbered_contexts),
             query=query.strip()
         )
+        print("Returned prompt: ",prompt)
+        return prompt
 
     @retry(
         stop=stop_after_attempt(3),
@@ -242,42 +256,11 @@ class Basic_RAG(RAGEngine):
             # Build the prompt
             prompt = self.build_prompt(contexts, query)
             
-            # Call Gemini API (using hypothetical API structure)
-            response = requests.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-                # "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent",
-                headers={
-                    "Content-Type": "application/json"
-                },
-                params={
-                    "key": self.api_key  # Make sure this is a valid Gemini API key
-                },
-                json={
-                    "contents": [
-                        {
-                            "parts": [
-                                {"text": prompt}
-                            ]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.0,
-                        "maxOutputTokens": 1000,
-                        # "stopSequences": ["\n\n"]
-                    }
-                },
-                timeout=10
-            )
-
-            response.raise_for_status()  # Raises exception for 4XX/5XX responses
-            result = response.json()
-
-            print(response)
-            print(result)
+            result = language_model_api(option=self.option,prompt=prompt)
             
             return {
                 # "answer": result.get("text", "").strip(),
-                "answer":result.get("candidates")[0].get("content")['parts'][0]['text'],
+                "answer":result,
                 "contexts": contexts,
                 "error": None
             }
@@ -296,9 +279,9 @@ class Basic_RAG(RAGEngine):
             }
 
 class Hybrid_RAG(RAGEngine):
-    def __init__(self,model: str = "mistral-small", temperature: float = 0.0):
-        self.model = model
-        self.temperature = temperature
+    def __init__(self,option:int):
+        # self.model = "mistral-small"
+        self.temperature = 0.0
 
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
@@ -313,15 +296,18 @@ class Hybrid_RAG(RAGEngine):
 
         self.retriever = None
         self.documents = []
-        self.api_key=MISTRAL_API_KEY
-        self.api_url = "https://api.mistral.ai/v1/chat/completions"
+        # self.api_key=MISTRAL_API_KEY
+        self.option=option
+        # self.api_url = "https://api.mistral.ai/v1/chat/completions"
     
     def chunk(self, file_path: str) -> List[str]:
         loader = PyPDFLoader(file_path=file_path)
         documents = loader.load()
 
         chunks = self.text_splitter.split_documents(documents=documents)
-        self.documents = chunks
+        self.documents.extend(chunks)
+
+        print(chunks)
 
         clear_directory(UPLOAD_DIR)
 
@@ -333,9 +319,9 @@ class Hybrid_RAG(RAGEngine):
 
         return dense_retriever
     
-    def ingest(self, file_path:str) -> bool:
+    def ingest(self) -> bool:
         try:
-            self.chunk(file_path=file_path)
+            # self.chunk(file_path=file_path)
 
             if not self.documents:
                 raise ValueError("No valid chunks extracted!")
@@ -358,7 +344,7 @@ class Hybrid_RAG(RAGEngine):
             self.retriever = None
             return False
 
-    def search(self, query:str, top_k:int=3) -> Optional[List[str]]:
+    def search(self, query:str, top_k:int=10) -> Optional[List[str]]:
 
         print(self.retriever)
 
@@ -395,7 +381,7 @@ class Hybrid_RAG(RAGEngine):
         
         prompt_template = (
             "You are a helpful AI assistant. Answer the question based only on the provided context. "
-            "If you don't know the answer, say 'I don't know'.\n\n"
+            "If the answer is not directly in the context, try to infer it from the information provided'.\n\n"
             # "Continue your answer after the ':' puncuation"
             "{contexts}\n\n"
             "Question: {query}\n"
@@ -470,28 +456,7 @@ class Hybrid_RAG(RAGEngine):
             #     timeout=10
             # )
 
-            headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-            }
-
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": self.temperature,
-            }
-
-            response = requests.post(self.api_url, headers=headers, json=payload)
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-
-            response.raise_for_status()  # Raises exception for 4XX/5XX responses
-            result = response.json()
-
-            print(response)
-            print(result)
+            content = language_model_api(option=self.option,prompt=prompt)
             
             return {
                 # "answer": result.get("text", "").strip(),
@@ -514,21 +479,26 @@ class Hybrid_RAG(RAGEngine):
             }
 
 class AutoMerge_RAG(RAGEngine):
-    def __init__(self):
+    def __init__(self,option:int):
         
         self.embedding_model = HuggingFaceBgeEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
-        self.llm = Groq(
-            model="llama-3.3-70b-versatile",  # You can change this to llama3-70b or gemma-7b too
-            api_key=GROQ_API_KEY,
-            temperature=0.7,
-        )
+        # self.llm = Groq(
+        #     model="llama-3.3-70b-versatile",  # You can change this to llama3-70b or gemma-7b too
+        #     api_key=GROQ_API_KEY,
+        #     temperature=0.7,
+        # )
+
+        # self.model="llama-3.3-70b-versatile"
+        # self.api_key=GROQ_API_KEY
+        self.option=option
+        # self.api_url="https://api.groq.com/openai/v1/chat/completions"
 
         self.node_parser = HierarchicalNodeParser.from_defaults()
 
-        Settings.llm=self.llm
+        # Settings.llm=self.llm
         Settings.embed_model=self.embedding_model
         Settings.node_parser=self.node_parser
 
@@ -538,7 +508,9 @@ class AutoMerge_RAG(RAGEngine):
 
     def chunk(self, file_path:str) -> List[str]:
         reader = SimpleDirectoryReader(input_files=[file_path])
-        self.documents=reader.load_data()
+        self.documents.extend(reader.load_data())
+
+        print(self.documents)
 
         splitter = SentenceSplitter(chunk_size=500, chunk_overlap=50)
         parsed_nodes = splitter.get_nodes_from_documents(self.documents)
@@ -549,9 +521,12 @@ class AutoMerge_RAG(RAGEngine):
     def embed(self, *args, **kwargs):
         pass
 
-    def ingest(self, file_path):
+    def ingest(self):
         try:
-            self.chunk(file_path=file_path)
+            # self.chunk(file_path=file_path)
+            if not self.documents:
+                raise ValueError("No valid chunks extracted!")
+
             self.index = VectorStoreIndex.from_documents(
                 documents=self.documents
             )
@@ -562,7 +537,7 @@ class AutoMerge_RAG(RAGEngine):
             self.index = None
             return False
     
-    def search(self, query: str, top_k: int = 3) -> Optional[List[str]]:
+    def search(self, query: str, top_k: int = 10) -> Optional[List[str]]:
         if not self.index:
             print("Index not initialized.")
             return None
@@ -586,7 +561,7 @@ class AutoMerge_RAG(RAGEngine):
 
         return (
             "You are a helpful assistant. Use the following contexts to answer the question. "
-            "If unsure, say 'I don't know'.\n\n"
+            "If the answer is not directly in the context, try to infer it from the information provided'\n\n"
             f"{'\n\n'.join(numbered_contexts)}\n\n"
             f"Question: {query}\n"
             "Answer:"
@@ -606,10 +581,11 @@ class AutoMerge_RAG(RAGEngine):
             contexts = [res[0] if isinstance(res, tuple) else res for res in search_results]
             prompt = self.build_prompt(contexts, query)
 
-            response = self.llm.complete(prompt)
+            # response = self.llm.complete(prompt)
+            response = language_model_api(option=self.option,prompt=prompt)
 
             return {
-                "answer": response.text.strip(),
+                "answer": response,
                 "contexts": contexts,
                 "error": None
             }
