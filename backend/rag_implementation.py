@@ -29,7 +29,7 @@ from llama_index.core.text_splitter import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever, AutoMergingRetriever
 from llama_index.core.schema import Document
 from llama_index.core.node_parser import HierarchicalNodeParser
-from llama_index.llms.groq import Groq
+# from llama_index.llms.groq import Groq
 
 from typing import List, Optional, Dict
 from transformers import AutoTokenizer, AutoModel
