@@ -32,6 +32,11 @@ rag_pipelines={}
 UPLOAD_DIR = "temp_uploads"
 Path(UPLOAD_DIR).mkdir(exist_ok=True)
 
+@app.get("/healthz")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/upload", 
           summary="Uploading multiple pdfs", 
           description="The endpoint accepts upto three pdfs and ingests them according to the user's chosen RAG architecture")

@@ -1,8 +1,8 @@
 'use client';
 
 import FormattedLLMResponse from "@/components/FormattedLLMResponse";
-import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
+// import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ type ChatMessage = {
 };
 
 export default function QueryPage() {
-  const searchParams = useSearchParams();
+//   const searchParams = useSearchParams();
 //   const optionFromQuery = searchParams.get("option") ?? "1";
 //   const [option] = useState<number>(parseInt(optionFromQuery, 10));
   const [query, setQuery] = useState("");
@@ -70,8 +70,12 @@ export default function QueryPage() {
         { sender: "bot", text: data.answer || "No answer received.",contexts:data.contexts.slice(0,2) || [] },
       ]);
       setQuery("");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to fetch answer");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(error.message || "Failed to fetch answer");
+      } else {
+        toast.error("Failed to fetch answer");
+      }
     } finally {
       setLoading(false);
     }
