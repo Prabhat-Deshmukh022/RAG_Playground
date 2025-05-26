@@ -60,10 +60,13 @@ def query(question, rag_option):
         url = f"{API_QUERY}?option={rag_option}"
 
         # Send 'question' as form data
+        start=time.time()
         response = requests.post(url, data={"query": question})
+        end=time.time()
 
         if response.ok:
-            return response.json().get("answer", "")
+            response_time=end-start
+            return response.json(),response_time
         else:
             return f"[ERROR] {response.status_code}: {response.text}"
     except Exception as e:
@@ -87,18 +90,31 @@ def evaluate(input_csv, output_csv):
                 question = row["question"]
                 ground_truth = row["answer"]
 
-                model_answer = query(question,rag_option=rag_option)
+                result = query(question, rag_option=rag_option)
+                if isinstance(result, tuple):
+                    result_dict, response_time = result
+                else:
+                    result_dict, response_time = result, None
+
+                if isinstance(result_dict, dict):
+                    model_answer = result_dict.get("answer", "")
+                    contexts = result_dict.get("contexts", "")
+                else:
+                    model_answer = result_dict  # error string
+                    contexts = ""
 
                 results.append({
-                    "Reference_Q": question,
-                    "Reference_A": ground_truth,
+                    "question": question,
+                    "answer": model_answer,
+                    "contexts":contexts,
+                    "ground_truth": ground_truth,
                     "LLM_Type": LLM_TYPES[llm_option],
                     "RAG_Type": RAG_TYPES[rag_option],
-                    "Answer": model_answer
+                    "response_time":response_time
                 })
 
     pd.DataFrame(results).to_csv(output_csv, index=False)
     print(f"\n✅ Evaluation saved to {output_csv}")
 
 if __name__ == "__main__":
-    evaluate("ground_truth.csv", "rag_llm_evaluation_results.csv")
+    evaluate("ground_truth.csv", "rag_llm_evaluation_results2.csv")

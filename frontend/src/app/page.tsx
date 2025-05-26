@@ -23,8 +23,8 @@ export default function Home() {
       <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-xl">
         Upload PDFs and explore answers from multiple Retrieval-Augmented Generation pipelines.
       </p>
-      <Button onClick={() => router.push("/upload")}>
-        Go to Upload Page
+      <Button onClick={() => router.push("/query")}>
+        Chat! 
       </Button>
     </div>
   );
