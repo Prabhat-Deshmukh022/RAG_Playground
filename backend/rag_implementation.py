@@ -563,8 +563,8 @@ class AutoMerge_RAG(RAGEngine):
         return (
             "You are a helpful assistant. Use the following contexts to answer the question. "
             "If the answer is not directly in the context, try to infer it from the information provided'\n\n"
-            f"{'\n\n'.join(numbered_contexts)}\n\n"
-            f"Question: {query}\n"
+            f"{''.join(numbered_contexts)}"
+            f"Question: {query}"
             "Answer:"
         )
 
