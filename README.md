@@ -54,7 +54,7 @@ RAG_Application/
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Prabhat-Deshmukh022/RAG_Playground.git
 cd RAG_Application
 ```
 
