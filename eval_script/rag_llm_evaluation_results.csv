@@ -1,4 +1,4 @@
-Reference_Q,Reference_A,LLM_Type,RAG_Type,Answer
+question,Reference_A,LLM_Type,RAG_Type,answer
 What is the primary objective of the research presented in the IJSRA-2023-0710 paper?,"The primary objective is to explore the integration of Artificial Intelligence (AI) in project management to enhance decision-making, optimize resource allocation, and improve project outcomes.",Gemini,Basic,"The provided contexts do not contain any information about a paper titled ""IJSRA-2023-0710,"" nor do they state its primary objective. Therefore, I cannot answer your question based on the given information."
 How does the paper categorize the applications of AI in project management?,"The paper categorizes AI applications into areas such as risk management, scheduling, cost estimation, resource allocation, and stakeholder communication.",Gemini,Basic,"Based on the provided contexts, the paper does not categorize the applications of AI specifically in project management.
 

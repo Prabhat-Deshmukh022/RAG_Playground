@@ -1,39 +1,53 @@
 import os
 import pandas as pd
-import ast
 from datasets import Dataset
-from ragas import evaluate
-from ragas.llms import BaseRagasLLM
-from ragas.embeddings import SentenceTransformersEmbedding
-from ragas.metrics import faithfulness, answer_relevancy, context_precision
-from langchain_community.llms import HuggingFaceHub
+from ast import literal_eval
 from dotenv import load_dotenv
 
 load_dotenv()
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACE_API_KEY")
 
-# 1. Setup HuggingFaceHub Langchain LLM
-llm = HuggingFaceHub(
-    repo_id="HuggingFaceH4/zephyr-7b-alpha",  # or any other supported HF model
-    model_kwargs={"temperature": 0.2, "max_new_tokens": 512},
-    huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN,
+from langchain_groq.chat_models import ChatGroq
+from ragas.llms import LangchainLLMWrapper
+from ragas import evaluate
+from ragas.metrics import (
+    Faithfulness,
+    AnswerRelevancy,
+    ContextPrecision,
+    ContextRecall,
+    ContextRelevance,
+    AnswerCorrectness,
 )
 
-# 2. Wrap it for RAGAS
-ragas_llm = BaseRagasLLM(llm=llm)
-BaseRagasLLM.set_llm(ragas_llm)
+# Set Groq API key
+os.environ["GROQ_API_KEY_2"] = os.getenv("GROQ_API_KEY_2")
 
-# Optional: set embedding model (optional, but helps for context_precision)
-embedding = SentenceTransformersEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
-SentenceTransformersEmbedding.set_embedding(embedding)
+# Use Groq LLM via Langchain
+groq_llm = ChatGroq(model="llama3-70b-8192")
+wrapped_llm = LangchainLLMWrapper(langchain_llm=groq_llm)
 
-# 3. Load and clean data
+# Load CSV
 df = pd.read_csv("rag_llm_evaluation_results2.csv")
-df["contexts"] = df["contexts"].fillna("[]").apply(ast.literal_eval)
+df=df.sample(10,random_state=42)
 
-# 4. Convert to HF dataset
-dataset = Dataset.from_pandas(df[["question", "answer", "contexts", "ground_truth"]])
+# Convert context strings to list
+df["contexts"] = df["contexts"].apply(lambda x: literal_eval(x) if isinstance(x, str) else [])
 
-# 5. Evaluate
-result = evaluate(dataset, metrics=[faithfulness, answer_relevancy, context_precision])
-print(result)
+# Convert to HuggingFace Dataset
+dataset = Dataset.from_pandas(df)
+
+# Evaluate RAG with RAGAS and Groq
+results = evaluate(
+    dataset,
+    metrics=[
+        Faithfulness(),
+        AnswerRelevancy(),
+        ContextPrecision(),
+        ContextRecall(),
+        ContextRelevance(),
+        AnswerCorrectness(),
+    ],
+    llm=wrapped_llm
+)
+
+print("\n📊 RAGAS Evaluation Results:")
+print(results)

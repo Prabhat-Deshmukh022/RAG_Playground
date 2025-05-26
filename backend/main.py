@@ -14,7 +14,7 @@ from remove_file_contents import clear_directory
 
 app = FastAPI(
     title="RAG Architecture Comparison API",
-    description="This API allows uploading PDFs and comparing different RAG pipelines (Basic, Hybrid, Auto-Merge)."
+    description="This endpoint allows uploading PDFs and comparing different RAG pipelines (Basic, Hybrid, Auto-Merge)."
 )
 
 # Enable CORS if frontend is separate

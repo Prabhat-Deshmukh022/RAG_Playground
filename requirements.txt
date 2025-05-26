@@ -1,4 +1,6 @@
 langchain
+langchain-huggingface
+llama-index
 langchain-community
 faiss-cpu
 sentence-transformers
@@ -8,9 +10,8 @@ fastapi
 uvicorn
 python-multipart
 tqdm
-aiofiles  # for async file uploads
-jinja2     # Optional, for templating
-langchainhub  # For community tools/templates
-langchain-cli # For dev tools and chains
+aiofiles  
+langchainhub  
+langchain-cli 
 requests
 torch
