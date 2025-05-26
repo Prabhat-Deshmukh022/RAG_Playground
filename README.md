@@ -1,17 +1,18 @@
-# RAG Architecture Comparison API
+# RAG Architecture Comparison Application
 
-This project provides a FastAPI-based backend for uploading PDF documents and comparing different Retrieval-Augmented Generation (RAG) pipelines: **Basic RAG**, **Hybrid RAG**, and **Auto-Merge RAG**. It supports chunking, embedding, vector search, and querying with various LLMs (Gemini, Mistral, Groq, etc.), and is designed for easy experimentation and benchmarking.
+A full-stack application for uploading PDFs, ingesting them into different Retrieval-Augmented Generation (RAG) pipelines, and querying them using various LLMs (Gemini, Mistral, Groq, etc.). The project features a FastAPI backend and a Next.js (React) frontend.
 
 ---
 
 ## Features
 
-- **Upload Multiple PDFs:** Upload up to three PDF files at once for ingestion.
-- **Three RAG Pipelines:** Choose between Basic, Hybrid, and Auto-Merge RAG architectures.
-- **Flexible LLM Integration:** Easily switch between different LLM providers (Gemini, Mistral, Groq, etc.).
-- **Contextual Querying:** Retrieve relevant document chunks and generate answers using the selected LLM.
-- **Extensible Design:** Modular codebase for adding new RAG strategies or LLMs.
-- **API-First:** Built with FastAPI for easy integration with frontends or other services.
+- **Upload up to 3 PDFs** at once for ingestion.
+- **Choose between three RAG architectures:** Basic RAG, Hybrid RAG, and Auto-Merge RAG.
+- **Select LLM provider:** Gemini, Mistral, or Groq.
+- **Chat interface** for querying ingested documents.
+- **Context display:** See which document chunks were used to answer your question.
+- **Extensible backend:** Modular design for adding new RAG strategies or LLMs.
+- **Evaluation scripts** for benchmarking (RAGAS, LangSmith, etc.).
 
 ---
 
@@ -21,26 +22,34 @@ This project provides a FastAPI-based backend for uploading PDF documents and co
 RAG_Application/
 │
 ├── backend/
-│   ├── main.py                # FastAPI app with endpoints for upload and query
-│   ├── rag_implementation.py  # RAG pipeline implementations (Basic, Hybrid, AutoMerge)
-│   ├── remove_file_contents.py
-│   ├── language_model_api.py
-│   └── temp_uploads/          # Temporary storage for uploaded PDFs
+│   ├── main.py                  # FastAPI app (API endpoints)
+│   ├── rag_implementation.py    # RAG pipeline implementations
+│   ├── remove_file_contents.py  # Utility to clear temp files
+│   ├── language_model_api.py    # LLM API abstraction
+│   └── temp_uploads/            # Temporary PDF storage
 │
 ├── RAG/
-│   ├── RAG_Engine.py          # Base RAGEngine interface
-│   └── RAG_Interfaces/        # Interface definitions for modularity
+│   ├── RAG_Engine.py            # RAGEngine interface
+│   └── RAG_Interfaces/          # Modular interfaces (Chunker, Embedding, etc.)
 │
 ├── eval_script/
-│   └── ...                    # Evaluation scripts (e.g., RAGAS, LangSmith)
+│   └── ...                      # Evaluation scripts (RAGAS, LangSmith, etc.)
 │
-├── .env                       # Environment variables (API keys, etc.)
-└── requirements.txt           # Python dependencies
+├── frontend/
+│   └── src/
+│       └── app/
+│           └── query/
+│               └── page.tsx     # Main chat/query page
+│       └── components/          # UI components (FormattedLLMResponse, ContextToggleButton, etc.)
+│
+├── .env                         # Environment variables (API keys, etc.)
+├── requirements.txt             # Python dependencies
+└── README.md
 ```
 
 ---
 
-## Setup Instructions
+## Backend Setup (FastAPI)
 
 ### 1. Clone the Repository
 
@@ -65,18 +74,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Key dependencies:**
-- fastapi
-- uvicorn
-- langchain
-- llama-index
-- sentence-transformers
-- torch
-- faiss-cpu
-- pypdf
-- tenacity
-- python-dotenv
-
 ### 4. Set Up Environment Variables
 
 Create a `.env` file in the root directory with your API keys:
@@ -87,11 +84,7 @@ MISTRAL_API_KEY=your_mistral_api_key
 GROQ_API_KEY=your_groq_api_key
 ```
 
-Add any other keys as needed for your LLM providers.
-
----
-
-## Running the API Server
+### 5. Run the API Server
 
 ```bash
 cd backend
@@ -102,7 +95,7 @@ The API will be available at [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 ---
 
-## API Endpoints
+## Backend API Endpoints
 
 ### 1. Health Check
 
@@ -121,7 +114,7 @@ Returns:
 
 **Form Data:**
 - `rag_option` (int): 1 = Basic, 2 = Hybrid, 3 = Auto-Merge
-- `llm_option` (int): LLM selection (see your `language_model_api.py` for mapping)
+- `llm_option` (int): 1 = Gemini, 2 = Mistral, 3 = Groq
 - `files`: Up to 3 PDF files
 
 **Example (using curl):**
@@ -148,10 +141,9 @@ curl -X POST "http://127.0.0.1:8000/upload" \
 
 ### 3. Query the RAG Pipeline
 
-**POST** `/query`
+**POST** `/query?option=<rag_option>`
 
 **Form Data:**
-- `option` (int): The RAG pipeline to use (should match the one used in upload)
 - `query` (str): Your question
 
 **Example (using curl):**
@@ -171,20 +163,54 @@ curl -X POST "http://127.0.0.1:8000/query?option=1" \
 
 ---
 
+## Frontend Setup (Next.js/React)
+
+### 1. Install Node.js dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. Set API URL
+
+Create a `.env.local` file in `frontend/`:
+
+```
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+```
+
+### 3. Run the Frontend
+
+```bash
+npm run dev
+```
+
+The frontend will be available at [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Frontend Usage
+
+- **Upload PDFs:** Use the upload section to select up to 3 PDFs, choose RAG architecture and LLM, and upload.
+- **Chat:** Enter your question in the chat box and press Enter or click Send.
+- **Context Display:** For each bot answer, click the context button to view the document chunks used for the answer.
+- **Switch RAG/LLM:** Use the dropdowns to change RAG architecture or LLM for new uploads.
+
+---
+
 ## RAG Pipelines Explained
 
-- **Basic_RAG:** Uses manual chunking, custom embedding with sentence-transformers, and FAISS for vector search.
-- **Hybrid_RAG:** Combines dense (FAISS) and sparse (BM25) retrieval using LangChain's EnsembleRetriever.
-- **AutoMerge_RAG:** Uses LlamaIndex's AutoMergingRetriever for advanced context aggregation.
-
-All pipelines support prompt construction and querying via your selected LLM.
+- **Basic RAG:** Manual chunking, custom embedding (sentence-transformers), FAISS vector search.
+- **Hybrid RAG:** Combines dense (FAISS) and sparse (BM25) retrieval using LangChain's EnsembleRetriever.
+- **Auto-Merge RAG:** Uses LlamaIndex's AutoMergingRetriever for advanced context aggregation.
 
 ---
 
 ## Customization
 
-- **Add new LLMs:** Extend `language_model_api.py` and pass new options to the RAG classes.
-- **Change chunking/embedding:** Modify the `chunk` and `embed` methods in the RAG classes.
+- **Add new LLMs:** Extend `language_model_api.py` and update the frontend dropdown.
+- **Change chunking/embedding:** Modify the respective methods in `rag_implementation.py`.
 - **Evaluation:** Use scripts in `eval_script/` for RAGAS or LangSmith-based evaluation.
 
 ---
@@ -195,12 +221,7 @@ All pipelines support prompt construction and querying via your selected LLM.
 - **CUDA/CPU:** By default, embeddings run on CPU. Modify device selection in `rag_implementation.py` if you want GPU.
 - **File Limits:** The `/upload` endpoint is set for up to 3 PDFs by default.
 - **Rate Limits:** If using cloud LLMs, be aware of API rate limits and quotas.
-
----
-
-## License
-
-MIT License
+- **CORS Issues:** The backend enables CORS for all origins by default. Restrict in production.
 
 ---
 
@@ -211,9 +232,6 @@ MIT License
 - [Sentence Transformers](https://www.sbert.net/)
 - [FAISS](https://github.com/facebookresearch/faiss)
 - [FastAPI](https://fastapi.tiangolo.com/)
+- [Next.js](https://nextjs.org/)
 
 ---
-
-## Contact
-
-For questions or contributions, please open an issue or pull request on the repository.
