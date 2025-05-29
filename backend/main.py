@@ -99,6 +99,8 @@ async def query_rag(rag_option:int, query: str = Form(...)):
 
         rag_pipeline = app.state.rag_pipelines.get((rag_option))
 
+        print(rag_pipeline)
+
         if rag_pipeline is None:
             raise HTTPException(status_code=400, detail="No pipeline loaded for this option. Please upload documents first.") 
 
@@ -121,3 +123,18 @@ async def query_rag(rag_option:int, query: str = Form(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/exit",summary="Ending chat session and clearing all state")
+async def end_session(rag_option:int):
+
+    rag_pipeline = app.state.rag_pipelines.get((rag_option))
+
+    print(rag_pipeline)
+
+    if rag_pipeline is None:
+            raise HTTPException(status_code=400, detail="No pipeline loaded for this option. Please upload documents first.")
+
+    rag_pipeline.clear_vector_db()
+
+    app.state.rag_pipelines.clear()
+
+    return {"message":"State cleared"}

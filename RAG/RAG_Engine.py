@@ -1,14 +1,3 @@
-# import sys
-# import os
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# import RAG.RAG_Interfaces.Chunker as chunker
-# import RAG.RAG_Interfaces.Embedding as embedder
-# import RAG.RAG_Interfaces.Query as querier
-# import RAG.RAG_Interfaces.Ingester as ingester
-# import RAG.RAG_Interfaces.Search as searcher
-# import RAG.RAG_Interfaces.Prompter as prompter
-
 from typing import Dict, List, Optional
 
 import requests
@@ -19,6 +8,7 @@ from llama_index.core.storage import StorageContext
 from langchain_huggingface import HuggingFaceEmbeddings
 from llama_index.core import Settings
 
+import shutil
 from abc import ABC, abstractmethod
 
 from backend.language_model_api import language_model_api
@@ -29,7 +19,6 @@ class RAGEngine(ABC):
 
     def __init__(self,llm_option:int):
         self.text_splitter = SentenceSplitter(
-            # separator=[" ","","\n","\n\n"],
             chunk_size=500,
             chunk_overlap=50,
         )
@@ -95,14 +84,14 @@ class RAGEngine(ABC):
         
         prompt_template = (
             "You are a helpful AI assistant. Answer the question based only on the provided context. "
-            "If the answer is not directly in the context, try to infer it from the information provided'.\n\n"
-            "{contexts}\n\n"
-            "Question: {query}\n"
+            "If the answer is not directly in the context, try to infer it from the information provided'."
+            "{contexts}"
+            "Question: {query}"
             "Answer:"
         )
         
         return prompt_template.format(
-            contexts="\n\n".join(numbered_contexts),
+            contexts="".join(numbered_contexts),
             query=query.strip()
         )
 
@@ -158,9 +147,17 @@ class RAGEngine(ABC):
                 "error": f"Unexpected error: {str(e)}"
             }
 
-    
+    def clear_vector_db(self):
+        persist_dir1='./storage'
+        persist_dir2='./vector_db'
 
+        if os.path.exists(persist_dir1):
+            shutil.rmtree(persist_dir1)
+        
+        if os.path.exists(persist_dir2):
+            shutil.rmtree(persist_dir2)
 
-
-
+        self.index=None
+        self.documents=[]
+        self.storage=StorageContext.from_defaults()
 
