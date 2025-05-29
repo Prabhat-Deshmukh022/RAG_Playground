@@ -4,35 +4,35 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from RAG.RAG_Engine import RAGEngine
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.retrievers import EnsembleRetriever
-# from langchain_community.retrievers import BM25Retriever
-from langchain.docstore.document import Document
-from sentence_transformers import SentenceTransformer
+# from langchain_community.document_loaders import PyPDFLoader
+# from langchain.text_splitter import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
+# from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_community.vectorstores import FAISS
+# from langchain.retrievers import EnsembleRetriever
+# # from langchain_community.retrievers import BM25Retriever
+# from langchain.docstore.document import Document
+# from sentence_transformers import SentenceTransformer
 
-from llama_index.core import (
-    VectorStoreIndex,
-    SimpleDirectoryReader,
-    Settings
-)
-from llama_index.core.text_splitter import SentenceSplitter
+# from llama_index.core import (
+#     VectorStoreIndex,
+#     SimpleDirectoryReader,
+#     Settings
+# )
+# from llama_index.core.text_splitter import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever, AutoMergingRetriever 
 from llama_index.retrievers.bm25 import BM25Retriever
-from llama_index.core.schema import Document
-from llama_index.core.node_parser import HierarchicalNodeParser
+# from llama_index.core.schema import Document
+# from llama_index.core.node_parser import HierarchicalNodeParser
 
 from typing import List, Optional, Dict
-import numpy as np
-import faiss
-import requests
+# import numpy as np
+# import faiss
+# import requests
 
-from remove_file_contents import clear_directory
-from language_model_api import language_model_api
+# from remove_file_contents import clear_directory
+# from language_model_api import language_model_api
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential
+# from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
