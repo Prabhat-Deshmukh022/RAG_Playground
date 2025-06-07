@@ -3,6 +3,11 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from RAG.RAG_Engine import RAGEngine
+from dotenv import load_dotenv
+
+load_dotenv()
+
+os.getenv("LLAMA_CLOUD_API_KEY")
 
 # from langchain_community.document_loaders import PyPDFLoader
 # from langchain.text_splitter import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
@@ -21,6 +26,8 @@ from RAG.RAG_Engine import RAGEngine
 # from llama_index.core.text_splitter import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever, AutoMergingRetriever 
 from llama_index.retrievers.bm25 import BM25Retriever
+from llama_index.indices.managed.llama_cloud import LlamaCloudIndex
+
 # from llama_index.core.schema import Document
 # from llama_index.core.node_parser import HierarchicalNodeParser
 
@@ -39,6 +46,7 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+LLAMA_CLOUD_API_KEY=os.getenv("LLAMA_CLOUD_API_KEY")
 UPLOAD_DIR = 'temp_uploads'
 
 
@@ -105,6 +113,50 @@ class AutoMerge_RAG(RAGEngine):
             print(f"Search failed: {str(e)}")
             return None
 
+# class MetaData_RAG(RAGEngine):
+    
+#     def __init__(self, llm_option):
+#         super().__init__(llm_option)
+    
+#     def chunk_and_embed(self):
+#         try:
+#             self.index = LlamaCloudIndex(
+#                 name="Metadata",
+#                 project_name="Default",
+#                 api_key=LLAMA_CLOUD_API_KEY,
+#                 verbose=True,
+                
+#     )
+#         except ValueError:
+#             # If index does not exist, create it
+#             self.index = LlamaCloudIndex.from_documents(
+#                 documents=[],  # or at least one document
+#                 name="Metadata",
+#                 project_name="Default",
+#                 api_key=LLAMA_CLOUD_API_KEY,
+#                 verbose=True
+#             )
+
+#         # for file_path in file_paths:
+#         #     self.index.upload_file(file_path=file_path, wait_for_ingestion=False)
+
+#         directory="./temp_uploads"
+
+#         for file_name in os.listdir(directory):
+#             file_path=os.path.join(directory, file_name)
+#             self.index.upload_file(file_path=file_path,wait_for_ingestion=False)
+        
+#         self.index.wait_for_completion()
+    
+#     def search(self, query:str):
+#         metadata_chunks = self.index.as_retriever(retrieval_mode="files_via_metadata").retrieve(query)
+
+#         print(metadata_chunks)
+
+# metadata = MetaData_RAG(2)
+
+# metadata.chunk_and_embed()
+# metadata.search("What is AI_PM1 about?")
 
 
 # class Basic_RAG(RAGEngine):

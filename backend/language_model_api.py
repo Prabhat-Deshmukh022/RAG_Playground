@@ -38,7 +38,7 @@ def language_model_api(option:int,prompt:str) -> Any:
                         # "stopSequences": ["\n\n"]
                     }
                 },
-                timeout=10
+                timeout=30
             )
 
             response.raise_for_status()  # Raises exception for 4XX/5XX responses

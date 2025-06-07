@@ -41,6 +41,7 @@ class RAGEngine(ABC):
 
         Settings.embed_model=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+    # @abstractmethod
     def chunk_and_embed(self,file_paths:List[str]):
         input_docs=[]
 

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select,SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast, Toaster } from "sonner";
+import { useRouter } from "next/navigation";
 import ContextToggleButton from "@/components/ContextToggleButton";
 
 type ChatMessage = {
@@ -20,9 +21,12 @@ export default function QueryPage() {
 //   const searchParams = useSearchParams();
 //   const optionFromQuery = searchParams.get("option") ?? "1";
 //   const [option] = useState<number>(parseInt(optionFromQuery, 10));
+  const router = useRouter()
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [files, setFiles] = useState<FileList | null>(null);
   const [ragOption, setRagOption] = useState<string>("1"); // default from URL
   const [llmOption, setLlmOption] = useState<string>("1"); // or "mistral" or any default
@@ -34,7 +38,7 @@ export default function QueryPage() {
       toast.error("Please enter a query.");
       return;
     }
-    setLoading(true);
+    setSending(true);
 
     setMessages((msgs) => 
         [
@@ -49,7 +53,7 @@ export default function QueryPage() {
     try {
         const formData = new FormData()
         formData.append("query",query)
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/query?option=${ragOption}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/query?rag_option=${ragOption}`, {
         method: "POST",
         // headers: {
         //   "Content-Type": "application/x-www-form-urlencoded",
@@ -77,7 +81,7 @@ export default function QueryPage() {
         toast.error("Failed to fetch answer");
       }
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   }
 
@@ -94,6 +98,7 @@ export default function QueryPage() {
       toast.error('Please select up to 3 PDF files.');
       return;
     }
+    setUploading(true)
 
     const formData = new FormData();
     formData.append('rag_option', ragOption.toString());
@@ -109,6 +114,7 @@ export default function QueryPage() {
       const data = await res.json();
       if (res.ok) {
         toast.success('Files uploaded and ingested successfully.');
+        setUploading(false)
         console.log(data);
       } else {
         toast.error(data.detail || 'Something went wrong.');
@@ -118,6 +124,34 @@ export default function QueryPage() {
       console.error(err);
     }
   };
+
+  const handleExit = async () => {
+   try {
+     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/exit?rag_option=${ragOption}`, {
+       method:'POST'
+     })
+    setExiting(true)
+
+     const data = await res.json()
+ 
+     if(res.ok){
+       console.log(`Exit successful ${data}`);
+       setExiting(false)
+       setQuery("")
+       setMessages([])
+       setFiles(null)
+       setRagOption("1")
+       setLlmOption("1")
+      router.push("/")
+     }
+     else{
+       toast.error(data.detail || 'Something went wrong!')
+     }
+   } catch (error) {
+    toast.error('Something went wrong')
+    console.error(error);
+   }
+  }
 
 // ...existing code...
 return (
@@ -198,8 +232,8 @@ return (
         </Select>
       </div>
       {/* Upload Button */}
-      <Button onClick={handleUpload} variant="secondary" className="ml-2 h-10 mt-6">
-        Upload
+      <Button onClick={handleUpload} disabled={uploading} variant="secondary" className="ml-2 h-10 mt-6">
+                  {uploading ? "Loading..." : "Upload"}
       </Button>
     </div>
   </div>
@@ -212,7 +246,7 @@ return (
           placeholder="Type your question here..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          disabled={loading}
+          disabled={sending}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -220,10 +254,18 @@ return (
             }
           }}
         />
-        <Button onClick={sendQuery} disabled={loading}>
-          {loading ? "Loading..." : "Send"}
+        <Button onClick={sendQuery} disabled={sending}>
+          {sending ? "Loading..." : "Send"}
+        </Button>
+
+        <div>
+        <Button onClick={handleExit} disabled={exiting}>
+          {exiting ? "Loading..." : "Exit"}
         </Button>
       </div>
+      </div>
+
+      
 
       <Toaster />
     </div>
